@@ -15,22 +15,22 @@
 
 int r=0, l=0;
 
-int change_dir(char *path)
+int read_args(int argc, char**argv)
 {
-	int suc=chdir(path);
-	if (suc<0) 
-		perror(path);
-	return suc;
-}
-
-void read_args(int argc, char**argv)
-{
+	struct stat buf;
+	
 	for (int i=1; i<argc; ++i)
-	{
-		if(strcmp(argv[i],"-l")==0) l=1;
-		else if(strcmp(argv[i],"-r")==0) r=1;
-		else if (change_dir(argv[i])<0) _exit(1);
-	}
+		if(strcmp(argv[i],"-l")==0) 
+			l=1;
+		else if(strcmp(argv[i],"-r")==0) 
+			r=1;
+		else if (stat(argv[i], &buf)<0) {
+			perror(argv[i]);
+			exit(1);
+		}
+		else 
+			return i;
+	return -1;
 }
 
 void print_mode(int mode)
@@ -87,42 +87,50 @@ void print(struct dirent *dir, struct stat *buf, int depth)
 	printf("%s\n", dir->d_name);
 	return;
 }
-
-//возвращает 0, если не поменялась директория. 1 иначе
-int ls( char *dirname, int depth)
-{	int k;
+void ls(char *dirname, int depth)
+{
 	struct stat buf;
-	if ( change_dir(dirname)<0 ) return 0; 
-	DIR *dir=opendir("./");
+	
+	DIR *dir=opendir(dirname);
 	
 	if(dir==NULL) {
 		perror(dirname);
-		return 1;
+		return;
 	}
 	
 	struct dirent *curr_dir;
-	
     while ( (curr_dir = readdir(dir)) != NULL) 
-    {
-		if (stat(curr_dir->d_name, &buf) < 0) {
-			perror(curr_dir->d_name);
-			scanf("%d", &k);
-		}
+    {	
+		strcat(dirname, "/");
+		strcat(dirname, curr_dir->d_name);
+		
+		if (stat(dirname, &buf) < 0)
+			perror(dirname);
 		else {
 			print(curr_dir, &buf, depth);
 			if (r==1 && S_ISDIR(buf.st_mode) && depth<MAX_DEPTH && curr_dir->d_name[0]!='.')
-				if (ls(curr_dir->d_name, depth+1)==1)
-					if (change_dir("./../")< 0) _exit(1);
+				ls(dirname, depth+1);
 		}
+		int i;
+		for(i=strlen(dirname)-1; dirname[i]!='/' && i>0; --i) dirname[i]='\0';
+		dirname[i]='\0';
     }
     
 	closedir(dir);
-	return 1;	
+	return;	
 }
 
 int main(int argc, char **argv)
 {
-	read_args( argc, argv);
-	ls("./", 0);
-	_exit(0);
+	char temp_str[255];
+	int k=read_args( argc, argv);
+	if (k==-1) {
+		strcpy(temp_str,"."); 
+		ls(temp_str, 0);
+	}
+	else {
+		strcpy(temp_str, argv[k]); 
+		ls(temp_str, 0);
+	}
+	exit(0);
 }
