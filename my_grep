@@ -1,0 +1,150 @@
+#include <sys/types.h> 
+#include <sys/stat.h> 
+#include <unistd.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <string.h>  
+#include <stdio.h>
+
+#define MAX_PATH_LENGTH 255
+
+int KMP (char s[], char p[])
+{ 
+	int i, j, N, M; 
+	N = strlen(s); 
+	M = strlen(p); 
+	int *d =(int*)malloc(M*sizeof(int));
+ 
+	d[0]=0;
+	for(i=1,j=0;i<M;i++)
+	{
+		while(j>0 && p[j]!=p[i]) 
+			j = d[j-1];
+		if(p[j]==p[i])
+			j++;
+		d[i]=j;
+	}
+
+	for(i=0,j=0;i<N; i++)
+	{
+		while(j>0 && p[j]!=s[i])
+			j=d[j-1];
+		if(p[j]==s[i]) 
+			j++;
+		if (j==M)
+                {
+					free (d); 
+					return i-j+1;
+                }
+	}
+        free (d); 
+	return -1;
+}
+
+//возращаем номер образца в argv 
+int read_args( int argc, char** argv, int *is_file)
+{
+	if (argc<3){
+		printf("input error: few arguments\n");
+		exit(1);
+	}
+	struct stat buff;
+	
+	if (stat(argv[2], &buff)<0) {
+		perror(argv[2]);
+		exit(1);	
+	}
+	
+	if(S_ISDIR(buff.st_mode)) 
+		*is_file=0;
+	else 
+		*is_file=1;
+	return 1;
+}
+
+void find_in_file( char *sample, char *src)
+{
+	printf("%s: \n", src);
+	char *buff=(char*)malloc(255*sizeof(char));
+	
+	FILE *file=fopen(src, "r");
+	if( file==NULL ){
+		printf("error: %s not found\n", src);
+		return;
+	}
+	
+	int i=0;
+	int num_str=0;
+	while (1) 
+	{
+		int ch = getc(file);
+		buff[(i++)%256]=ch;
+		buff[(i+1)%256]='\0';
+		if (feof(file)) 
+			break;
+		else if (ch == '\n') {
+			if ( KMP(buff, sample)>=0 ){
+				printf("	%s",buff);
+				++num_str;
+			}
+			i=0;
+		} 
+	}
+	
+	if(num_str==0) printf("	none\n");
+	
+	fclose(file);
+	free(buff);
+}
+
+void find_in_dir(char *sample, char *src)
+{
+	struct stat buf;
+	
+	DIR *dir=opendir(src);
+	
+	if(dir==NULL) {
+		perror(src);
+		return;
+	}
+	
+	struct dirent *curr_dir;
+	
+    while ( (curr_dir = readdir(dir)) != NULL) 
+    {	
+		if (curr_dir->d_name[0]!='.') {
+			strcat(src, "/");
+			strcat(src, curr_dir->d_name); 				
+
+			if (stat(src, &buf) < 0)
+				perror(curr_dir->d_name);			
+			else if( S_ISDIR(buf.st_mode) ) {
+				find_in_dir(sample, src);
+			}
+			else 
+				find_in_file(sample, src);
+			
+			int i;
+			for(i=strlen(src)-1; src[i]!='/' && i>0; --i) src[i]='\0';
+			src[i]='\0';
+		}
+    }
+    
+	closedir(dir);
+	return;	
+}
+
+int main(int argc, char** argv)
+{
+	int is_file=0;
+	int sample_order = read_args(argc, argv, &is_file);
+	if(is_file) find_in_file (argv[sample_order], argv[sample_order+1]);
+	else {
+		char src[MAX_PATH_LENGTH]="";
+		strcat(src, argv[argc-1]);
+		find_in_dir(argv[sample_order], src);
+	}
+	exit(0);
+}
